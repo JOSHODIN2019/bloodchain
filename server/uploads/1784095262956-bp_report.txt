@@ -1,0 +1,11 @@
+LAGOS UNIVERSITY TEACHING HOSPITAL
+Patient: Test Patient Claude
+Date: 2026-07-15
+Doctor: Dr. Adaeze Nwosu
+
+DIAGNOSIS: Hypertension Stage 1
+BP: 145/92 mmHg
+Heart Rate: 78 bpm
+
+PRESCRIPTION: Lisinopril 10mg once daily
+FOLLOW-UP: 4 weeks

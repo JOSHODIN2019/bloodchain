@@ -1,0 +1,10 @@
+{
+  "contractName": "BloodChainRecord",
+  "address": "0x0070829CdAf669dFAb677A8109eB044548BD6720",
+  "network": "sepolia",
+  "chainId": "11155111",
+  "deployedAt": "2026-07-21T04:31:15.783Z",
+  "deployer": "0x0b75857d7803d9C86E670F2a3E8f36572bd2497F",
+  "txHash": "0x9f05af49969c8ffba914fbd1f9253a2784648cb489df3ba1fd4c8b2f5f758a3c",
+  "blockNumber": 11317386
+}

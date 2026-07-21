@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><title>Admin Auth Inject</title></head>
+<body style="font-family:monospace;padding:20px;background:#f5f5f5">
+<h2 id="status">Logging in as admin…</h2>
+<pre id="out">Fetching…</pre>
+<script>
+(function(){
+  var out = document.getElementById('out');
+  var status = document.getElementById('status');
+  fetch('/api/auth/login', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({email:'admin@medrec.com', password:'Admin@12345'})
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(d){
+    out.textContent = JSON.stringify(d, null, 2);
+    if(d.token && d.user){
+      localStorage.setItem('bloodchain_token', d.token);
+      localStorage.setItem('bloodchain_user', JSON.stringify(d.user));
+      status.textContent = '✅ Auth injected — redirecting…';
+      setTimeout(function(){ window.location.href = '/admin/bloodbanks'; }, 800);
+    } else {
+      status.textContent = '❌ Login failed';
+    }
+  })
+  .catch(function(e){
+    out.textContent = 'Fetch error: ' + e;
+    status.textContent = '❌ Error';
+  });
+})();
+</script>
+</body>
+</html>
