@@ -1,5 +1,0 @@
-PATIENT: Joshua
-DATE: 2026-07-15
-DIAGNOSIS: Blood pressure elevated — 145/92 mmHg
-MEDICATION: Lisinopril 10mg once daily
-DOCTOR: Dr. Adaeze Nwosu

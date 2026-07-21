@@ -31,5 +31,13 @@ Thumbs.db
 blockchain/cache/
 blockchain/artifacts/
 
+# Local MongoDB data
+server/.mongodata/
+
+# Uploaded files (user content — not source code)
+server/uploads/*
+!server/uploads/demo/
+!server/uploads/.gitkeep
+
 # Misc
 *.local
