@@ -1,6 +1,19 @@
+import { createHash } from 'crypto'
 import Donation     from '../models/Donation.js'
 import BloodRequest  from '../models/BloodRequest.js'
 import { blockchainService } from '../services/blockchainService.js'
+
+function hashDonation({ donationId, donorId, bloodBankId, bloodType, units, status }) {
+  return createHash('sha256')
+    .update([donationId, donorId, bloodBankId, bloodType, String(units), status].join('::'))
+    .digest('hex')
+}
+
+function hashRequest({ requestId, hospitalId, bloodBankId, bloodType, units, status }) {
+  return createHash('sha256')
+    .update([requestId, hospitalId, bloodBankId, bloodType, String(units), status].join('::'))
+    .digest('hex')
+}
 
 /* ── GET /api/blockchain/verify/:id?type=donation|request ── */
 export const verifyRecord = async (req, res) => {
@@ -40,17 +53,30 @@ export const verifyRecord = async (req, res) => {
       }
 
       const discrepancies = []
-      const dbBloodType   = dbRecord.bloodType
-      const dbUnits       = dbRecord.units
-      const dbStatus      = dbRecord.status
       const dbDonorId     = (dbRecord.donorId?._id || dbRecord.donorId)?.toString()
       const dbBloodBankId = (dbRecord.bloodBankId?._id || dbRecord.bloodBankId)?.toString()
 
-      if (onChain.bloodType  !== dbBloodType)           discrepancies.push(`Blood type — database: "${dbBloodType}", chain: "${onChain.bloodType}"`)
-      if (Number(onChain.units) !== Number(dbUnits))    discrepancies.push(`Units — database: ${dbUnits}, chain: ${Number(onChain.units)}`)
-      if (onChain.status     !== dbStatus)              discrepancies.push(`Status — database: "${dbStatus}", chain: "${onChain.status}"`)
-      if (onChain.donorId    !== dbDonorId)             discrepancies.push(`Donor ID mismatch — record may have been re-assigned`)
-      if (onChain.bloodBankId !== dbBloodBankId)        discrepancies.push(`Blood bank ID mismatch — record may have been re-assigned`)
+      // Primary check: SHA-256 hash of all key fields (catches any field change)
+      if (dbRecord.blockchainHash) {
+        const currentHash = hashDonation({
+          donationId:  id,
+          donorId:     dbDonorId,
+          bloodBankId: dbBloodBankId,
+          bloodType:   dbRecord.bloodType,
+          units:       dbRecord.units,
+          status:      dbRecord.status,
+        })
+        if (currentHash !== dbRecord.blockchainHash) {
+          discrepancies.push(`Data integrity hash mismatch — one or more fields have been altered since this record was anchored to the blockchain`)
+        }
+      } else {
+        // Fallback for old records: compare individual fields from blockchain
+        if (onChain.bloodType   !== dbRecord.bloodType)                    discrepancies.push(`Blood type — database: "${dbRecord.bloodType}", chain: "${onChain.bloodType}"`)
+        if (Number(onChain.units) !== Number(dbRecord.units))              discrepancies.push(`Units — database: ${dbRecord.units}, chain: ${Number(onChain.units)}`)
+        if (onChain.status      !== dbRecord.status)                       discrepancies.push(`Status — database: "${dbRecord.status}", chain: "${onChain.status}"`)
+        if (onChain.donorId     !== dbDonorId)                             discrepancies.push(`Donor ID mismatch — record may have been re-assigned`)
+        if (onChain.bloodBankId !== dbBloodBankId)                         discrepancies.push(`Blood bank ID mismatch — record may have been re-assigned`)
+      }
 
       return res.json({
         success:      true,
@@ -59,7 +85,9 @@ export const verifyRecord = async (req, res) => {
         recordId:     id,
         txHash:       dbRecord.txHash,
         blockNumber:  dbRecord.blockNumber,
-        checkedFields: ['bloodType', 'units', 'status', 'donorId', 'bloodBankId'],
+        checkedFields: dbRecord.blockchainHash
+          ? ['bloodType', 'units', 'status', 'donorId', 'bloodBankId', 'blockchainHash']
+          : ['bloodType', 'units', 'status', 'donorId', 'bloodBankId'],
         discrepancies,
       })
     }
@@ -91,18 +119,31 @@ export const verifyRecord = async (req, res) => {
       })
     }
 
-    const discrepancies = []
-    const dbBloodType   = dbRecord.bloodType
-    const dbUnits       = dbRecord.units
-    const dbStatus      = dbRecord.status
-    const dbHospitalId  = (dbRecord.hospitalId?._id || dbRecord.hospitalId)?.toString()
+    const discrepancies  = []
+    const dbHospitalId  = (dbRecord.hospitalId?._id  || dbRecord.hospitalId)?.toString()
     const dbBloodBankId = (dbRecord.bloodBankId?._id || dbRecord.bloodBankId)?.toString()
 
-    if (onChain.bloodType   !== dbBloodType)            discrepancies.push(`Blood type — database: "${dbBloodType}", chain: "${onChain.bloodType}"`)
-    if (Number(onChain.units) !== Number(dbUnits))      discrepancies.push(`Units — database: ${dbUnits}, chain: ${Number(onChain.units)}`)
-    if (onChain.status      !== dbStatus)               discrepancies.push(`Status — database: "${dbStatus}", chain: "${onChain.status}"`)
-    if (onChain.hospitalId  !== dbHospitalId)           discrepancies.push(`Hospital ID mismatch — record may have been re-assigned`)
-    if (onChain.bloodBankId !== dbBloodBankId)          discrepancies.push(`Blood bank ID mismatch — record may have been re-assigned`)
+    // Primary check: SHA-256 hash of all key fields
+    if (dbRecord.blockchainHash) {
+      const currentHash = hashRequest({
+        requestId:   id,
+        hospitalId:  dbHospitalId,
+        bloodBankId: dbBloodBankId,
+        bloodType:   dbRecord.bloodType,
+        units:       dbRecord.units,
+        status:      dbRecord.status,
+      })
+      if (currentHash !== dbRecord.blockchainHash) {
+        discrepancies.push(`Data integrity hash mismatch — one or more fields have been altered since this record was anchored to the blockchain`)
+      }
+    } else {
+      // Fallback for old records: compare individual fields from blockchain
+      if (onChain.bloodType   !== dbRecord.bloodType)                    discrepancies.push(`Blood type — database: "${dbRecord.bloodType}", chain: "${onChain.bloodType}"`)
+      if (Number(onChain.units) !== Number(dbRecord.units))              discrepancies.push(`Units — database: ${dbRecord.units}, chain: ${Number(onChain.units)}`)
+      if (onChain.status      !== dbRecord.status)                       discrepancies.push(`Status — database: "${dbRecord.status}", chain: "${onChain.status}"`)
+      if (onChain.hospitalId  !== dbHospitalId)                          discrepancies.push(`Hospital ID mismatch — record may have been re-assigned`)
+      if (onChain.bloodBankId !== dbBloodBankId)                         discrepancies.push(`Blood bank ID mismatch — record may have been re-assigned`)
+    }
 
     return res.json({
       success:      true,
@@ -111,7 +152,9 @@ export const verifyRecord = async (req, res) => {
       recordId:     id,
       txHash:       dbRecord.txHash,
       blockNumber:  dbRecord.blockNumber,
-      checkedFields: ['bloodType', 'units', 'status', 'hospitalId', 'bloodBankId'],
+      checkedFields: dbRecord.blockchainHash
+        ? ['bloodType', 'units', 'status', 'hospitalId', 'bloodBankId', 'blockchainHash']
+        : ['bloodType', 'units', 'status', 'hospitalId', 'bloodBankId'],
       discrepancies,
     })
 

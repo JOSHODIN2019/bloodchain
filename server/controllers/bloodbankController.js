@@ -1,3 +1,4 @@
+import { createHash }  from 'crypto'
 import User           from '../models/User.js'
 import Donation        from '../models/Donation.js'
 import BloodInventory  from '../models/BloodInventory.js'
@@ -5,6 +6,18 @@ import BloodRequest    from '../models/BloodRequest.js'
 import { log }         from '../utils/auditLogger.js'
 import { notify }      from '../utils/notify.js'
 import { blockchainService } from '../services/blockchainService.js'
+
+function hashDonation({ donationId, donorId, bloodBankId, bloodType, units, status }) {
+  return createHash('sha256')
+    .update([donationId, donorId, bloodBankId, bloodType, String(units), status].join('::'))
+    .digest('hex')
+}
+
+function hashRequest({ requestId, hospitalId, bloodBankId, bloodType, units, status }) {
+  return createHash('sha256')
+    .update([requestId, hospitalId, bloodBankId, bloodType, String(units), status].join('::'))
+    .digest('hex')
+}
 
 const BLOOD_TYPES = ['A+','A-','B+','B-','AB+','AB-','O+','O-']
 
@@ -149,6 +162,17 @@ export const confirmDonation = async (req, res) => {
       data: { donationId: donation._id },
     })
 
+    // Compute and store tamper-proof hash of all key fields
+    const blockchainHash = hashDonation({
+      donationId:  donation._id.toString(),
+      donorId:     donation.donorId.toString(),
+      bloodBankId: req.user.id,
+      bloodType:   donation.bloodType,
+      units:       donation.units,
+      status:      'confirmed',
+    })
+    await Donation.findByIdAndUpdate(donation._id, { blockchainHash })
+
     // Record on-chain (fire-and-forget — don't block response)
     blockchainService.recordDonation({
       donationId: donation._id.toString(),
@@ -193,6 +217,16 @@ export const rejectDonation = async (req, res) => {
       message: `Your ${donation.bloodType} donation was not accepted. Reason: ${reason || 'Not specified'}.`,
       data: { donationId: donation._id },
     })
+
+    const blockchainHash = hashDonation({
+      donationId:  donation._id.toString(),
+      donorId:     donation.donorId.toString(),
+      bloodBankId: req.user.id,
+      bloodType:   donation.bloodType,
+      units:       donation.units,
+      status:      'rejected',
+    })
+    await Donation.findByIdAndUpdate(donation._id, { blockchainHash })
 
     blockchainService.recordDonation({
       donationId: donation._id.toString(),
@@ -265,6 +299,16 @@ export const fulfilRequest = async (req, res) => {
       message: `Your request for ${request.units} unit(s) of ${request.bloodType} has been fulfilled and is ready for dispatch.`,
       data: { requestId: request._id },
     })
+
+    const blockchainHashReq = hashRequest({
+      requestId:   request._id.toString(),
+      hospitalId:  request.hospitalId.toString(),
+      bloodBankId: req.user.id,
+      bloodType:   request.bloodType,
+      units:       request.units,
+      status:      'fulfilled',
+    })
+    await BloodRequest.findByIdAndUpdate(request._id, { blockchainHash: blockchainHashReq })
 
     blockchainService.recordBloodRequest({
       requestId:  request._id.toString(),
